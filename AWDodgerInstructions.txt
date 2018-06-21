@@ -1,0 +1,15 @@
+Your objective is to avoid getting hit by the 
+baddies. To accomplish this, use the arrow keys,
+"wasd" keys, and mouse to move  around. Remember
+that you can wrap around  the left and right edges
+of the screen.
+
+In survival mode, remember that once a distinctive
+sound has been played, then you can activate a free
+cheat by pressing either  the "c" key or by left-
+clicking with your mouse.
+
+You can always exit the game anytime by pressing the
+"escape" key or by clicking on the close button. To
+toggle the background music during gameplay, press
+the "m" key.
