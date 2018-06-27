@@ -3,9 +3,12 @@
 
 import pygame, random, sys
 from pygame.locals import *
+import json
+import os
 
 TEXTCOLOR = (255, 255, 255)
 BACKGROUNDCOLOR = (0, 0, 0)
+NAMEBOXCOLOR = (0, 191, 255)
 FPS = 40
 BADDIEMINSIZE = 10
 BADDIEMAXSIZE = 40
@@ -26,7 +29,11 @@ def waitForPlayerToPressKey():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE: # pressing escape quits
                     terminate()
-                return
+                if event.key == ord('v'):
+                    return 'view'
+                if event.key == ord('r'):
+                    return 'reset'
+                return  
 
 def selectMode():
     while True:
@@ -36,6 +43,8 @@ def selectMode():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     terminate()
+                if event.key == ord('i'):
+                    return 'instructions'
                 if event.key == ord('s'):
                     return 'survivalMode'
                 if event.key == ord('c'):
@@ -82,6 +91,7 @@ font = pygame.font.SysFont(None, 48)
 # set up sounds
 gameOverSound = pygame.mixer.Sound('gameover.wav')
 cheatsActiveSound = pygame.mixer.Sound('cheats.wav')
+pointTriplingSound = pygame.mixer.Sound('pickup.wav')
 cheatEarnedSound = pygame.mixer.Sound('cheatEarned.wav')
 
 # set up images
@@ -89,8 +99,18 @@ playerImage = pygame.image.load('player.png')
 playerRect = playerImage.get_rect()
 baddieImage = pygame.image.load('baddie.png')
 
-topSurvivalScore = 0
-topCasualScore = 0
+# creates text files for data
+filename = 'AWDodgerTopScores.json'
+
+try:
+    with open(filename, 'r') as f_obj:
+        topScores = json.load(f_obj)
+except FileNotFoundError:
+    topScores = [0, 0]
+topSurvivalScore = int(topScores[0])
+topCasualScore = int(topScores[1])
+
+musicPlaying = True
 
 while True:
     # set up variables for later manipulation
@@ -107,14 +127,32 @@ while True:
     survivalMode = False
     casualMode = False
 
-    # show the "Start" screen
-    drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
-    drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
-    drawText('Dodger', font, windowSurface, (WINDOWWIDTH / 2.25), (WINDOWHEIGHT / 3))
-    drawText('Press "s" for survival mode', font, windowSurface, (WINDOWWIDTH / 3), (WINDOWHEIGHT / 3) + 50)
-    drawText('Press "c" for casual mode', font, windowSurface, (WINDOWWIDTH / 3), (WINDOWHEIGHT / 3) + 100)
-    pygame.display.update()
-    mode = selectMode()
+    mode = ''
+    while mode != 'survivalMode' and mode != 'casualMode':
+        # show the "Start" screen
+        windowSurface.fill(BACKGROUNDCOLOR)
+        drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+        drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+        drawText('Dodger', font, windowSurface, (WINDOWWIDTH / 2.25), (WINDOWHEIGHT / 3))
+        drawText('Press "s" for survival mode', font, windowSurface, (WINDOWWIDTH / 3), (WINDOWHEIGHT / 3) + 50)
+        drawText('Press "c" for casual mode', font, windowSurface, (WINDOWWIDTH / 3), (WINDOWHEIGHT / 3) + 100)
+        drawText('Press "i" for instructions', font, windowSurface, (WINDOWWIDTH / 3), (WINDOWHEIGHT / 3) + 150)
+        pygame.display.update()
+        mode = selectMode()
+        if mode == 'instructions':
+            windowSurface.fill(BACKGROUNDCOLOR)
+            drawText('Press any key to continue', font, windowSurface, (WINDOWWIDTH / 3), 20)
+            filename_i = 'AWDodgerInstructions.txt'
+            try:
+                with open(filename_i, 'r') as f_obj:
+                    lines = f_obj.readlines()
+                for i in range(len(lines)):
+                    line = lines[i].rstrip()
+                    drawText('%s' % (line), font, windowSurface, (WINDOWWIDTH / 5), 100 + 40 * i)
+            except FileNotFoundError:
+                drawText('Instructions are currently not available', font, windowSurface, (WINDOWWIDTH / 3.5), (WINDOWHEIGHT / 3) + 100)
+            pygame.display.update()
+            waitForPlayerToPressKey()
 
     # clear screen to avoid overlapping text
     windowSurface.fill(BACKGROUNDCOLOR)
@@ -141,6 +179,7 @@ while True:
     # set up the start of the game
     baddies = []
     cheats = []
+    cheatTimer = 0
     score = 0
     if casualMode and easy:
         lives = 3
@@ -160,9 +199,11 @@ while True:
     roundedBaddieMinSpeed = baddieMinSpeed
     roundedBaddieMaxSpeed = baddieMaxSpeed
     roundedAddNewBaddieRate = addNewBaddieRate
+    usedMouse = False
 
     pygame.mixer.music.load('background.mid')
-    pygame.mixer.music.play(-1, 0.0)
+    if musicPlaying:
+        pygame.mixer.music.play(-1, 0.0)
     while True: # the game loop runs while the game part is playing
         # For survival mode, increase difficulty at intervals of 500 points
         if survivalMode:
@@ -184,7 +225,6 @@ while True:
                 cheat = random.randint(1, 4)
                 cheats.append(cheat)
                 cheatEarnedSound.play()
-                start_ticks = pygame.time.get_ticks()
                 
         elif casualMode and hard:
             baddieMinSize = 10
@@ -203,8 +243,31 @@ while True:
         for event in pygame.event.get():
             if event.type == QUIT:
                 terminate()
-
+            if event.type == MOUSEBUTTONDOWN:
+                if survivalMode:
+                    if event.button == 1 and len(cheats) >= 1:
+                        cheatNum = cheats[0]
+                        cheats.remove(cheats[0])
+                        if cheatNum == 1:
+                            reverseCheat = True
+                        elif cheatNum == 2:
+                            slowCheat = True
+                        elif cheatNum == 3:
+                            invincibleCheat = True
+                        else:
+                            triplePointCheat = True
+                        start_ticks = pygame.time.get_ticks()
+                elif casualMode:
+                    if event.button == 1:
+                        reverseCheat = True
+                    if event.button == 2:
+                        slowCheat = True
+                    if event.button == 3:
+                        invincibleCheat = True
+                        
             if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    terminate()
                 if survivalMode:
                     if event.key == ord('c') and len(cheats) >= 1:
                         cheatNum = cheats[0]
@@ -217,6 +280,7 @@ while True:
                             invincibleCheat = True
                         else:
                             triplePointCheat = True
+                        start_ticks = pygame.time.get_ticks()
                 elif casualMode:
                     if event.key == ord('z'):
                         reverseCheat = True
@@ -236,6 +300,18 @@ while True:
                 if event.key == K_DOWN or event.key == ord('s'):
                     moveUp = False
                     moveDown = True
+
+            if event.type == MOUSEBUTTONUP:
+                if casualMode:
+                    if event.button == 1:
+                        reverseCheat = False
+                        score = 0
+                    if event.button == 2:
+                        slowCheat = False
+                        score = 0
+                    if event.button == 3:
+                        invincibleCheat = False
+                        score = 0
 
             if event.type == KEYUP:
                 if casualMode:
@@ -258,13 +334,19 @@ while True:
                     moveUp = False
                 if event.key == K_DOWN or event.key == ord('s'):
                     moveDown = False
+                if event.key == ord('m'):
+                    if musicPlaying:
+                        pygame.mixer.music.stop()
+                    else:
+                        pygame.mixer.music.play(-1, 0.0)
+                    musicPlaying = not musicPlaying
 
             if event.type == MOUSEMOTION:
                 # If the mouse moves, move the player where the cursor is.
                 playerRect.move_ip(event.pos[0] - playerRect.centerx, event.pos[1] - playerRect.centery)
 
         # Add new baddies at the top of the screen, if needed.
-        if not reverseCheat and not slowCheat:
+        if not reverseCheat and not slowCheat and not invincibleCheat and not triplePointCheat:
             baddieAddCounter += 1
         if survivalMode and baddieAddCounter >= roundedAddNewBaddieRate:
             baddieAddCounter = 0
@@ -286,9 +368,13 @@ while True:
             baddies.append(newBaddie)
 
         # Move the player around.
-        if moveLeft and playerRect.left > 0:
+        if moveLeft:
+            if playerRect.left <= 0:
+                playerRect.right = WINDOWWIDTH
             playerRect.move_ip(-1 * PLAYERMOVERATE, 0)
-        if moveRight and playerRect.right < WINDOWWIDTH:
+        if moveRight:
+            if playerRect.right >= WINDOWWIDTH:
+                playerRect.left = 0
             playerRect.move_ip(PLAYERMOVERATE, 0)
         if moveUp and playerRect.top > 0:
             playerRect.move_ip(0, -1 * PLAYERMOVERATE)
@@ -303,7 +389,7 @@ while True:
             if not reverseCheat and not slowCheat:
                 b['rect'].move_ip(0, b['speed'])
             elif reverseCheat:
-                b['rect'].move_ip(0, -2)
+                b['rect'].move_ip(0, -3)
             elif slowCheat:
                 b['rect'].move_ip(0, 1)
 
@@ -311,7 +397,6 @@ while True:
         for b in baddies[:]:
             if b['rect'].top > WINDOWHEIGHT:
                 baddies.remove(b)
-
         
         # Draw the game world on the window.
         windowSurface.fill(BACKGROUNDCOLOR)
@@ -321,6 +406,7 @@ while True:
         drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
         drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
         drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+        drawText('Cheat Timer: %s' % (cheatTimer), font, windowSurface, 10, 160)
 
         # Draw the player's rectangle
         windowSurface.blit(playerImage, playerRect)
@@ -340,44 +426,193 @@ while True:
                 invincibleCheat = True
                 hitTriggered = True
                 start_ticks = pygame.time.get_ticks()
-            elif lives == 1:
+            elif lives == 1: # game over condition
+                lives -= 1
                 if survivalMode and score > topSurvivalScore:
                     topSurvivalScore = score # set new top score for survival mode
                 elif casualMode and score > topCasualScore:
                     topCasualScore = score # set new top score for casual mode
-                break
+                topScores = [topSurvivalScore, topCasualScore]
+                with open(filename, 'w') as f_obj:
+                    json.dump(topScores, f_obj)
 
+                # Update game world
+                windowSurface.fill(BACKGROUNDCOLOR)
+                drawText('Score: %s' % (score), font, windowSurface, 10, 0)
+                drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+                drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+                drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+                windowSurface.blit(playerImage, playerRect)
+                for b in baddies:
+                    windowSurface.blit(b['surface'], b['rect'])
+                pygame.display.update()
+                break
+        # Respond to when the invincibility mode is activated in casual mode
         if invincibleCheat and hitTriggered:
             pygame.mixer.music.stop()
             cheatsActiveSound.play()
             seconds = (pygame.time.get_ticks() - start_ticks)/1000
-            if seconds >= 3:
+            cheatTimer = int(3 - seconds)
+            if cheatTimer <= 0:
                 cheatsActiveSound.stop()
                 invincibleCheat = False
                 hitTriggered = False
-                pygame.mixer.music.play(-1, 0.0)
+                if musicPlaying:
+                    pygame.mixer.music.play(-1, 0.0)
+                cheatTimer = 0
+
+        # Respond to when a cheat is activated in survival mode
         if survivalMode and (reverseCheat or slowCheat or invincibleCheat or triplePointCheat):
-            pygame.mixer.music.stop()
-            cheatsActiveSound.play()
+            if not triplePointCheat:
+                pygame.mixer.music.stop()
+                cheatsActiveSound.play()
+                maxTime = 10
+            else:
+                pointTriplingSound.play()
+                maxTime = 7
             seconds = (pygame.time.get_ticks() - start_ticks)/1000
-            if seconds >= 7:
+            cheatTimer = int(maxTime - seconds)
+            if not triplePointCheat and cheatTimer <= 0:
                 cheatsActiveSound.stop()
                 reverseCheat = False
                 slowCheat = False
                 invincibleCheat = False
+                if musicPlaying:
+                    pygame.mixer.music.play(-1, 0.0)
+                cheatTimer = 0
+            elif triplePointCheat and cheatTimer <= 0:
+                pointTriplingSound.stop()
                 triplePointCheat = False
-                pygame.mixer.music.play(-1, 0.0)
+                cheatTimer = 0
         mainClock.tick(FPS)
 
     # Stop the game and show the "Game Over" screen.
     pygame.mixer.music.stop()
     gameOverSound.play()
 
-    drawText('GAME OVER', font, windowSurface, (WINDOWWIDTH / 2.25), (WINDOWHEIGHT / 3))
-    drawText('Press a key to play again', font, windowSurface, (WINDOWWIDTH / 3), (WINDOWHEIGHT / 3) + 50)
-    pygame.display.update()
-    
-    waitForPlayerToPressKey()
+    # Have player enter name.
+    nameBox1 = pygame.Rect(WINDOWWIDTH/3, WINDOWHEIGHT/2.75, WINDOWWIDTH/2.8, WINDOWHEIGHT/9)
+    nameBox2 = pygame.Rect(WINDOWWIDTH/3 + 3, WINDOWHEIGHT/2.75 + 3, WINDOWWIDTH/2.8 - 6, WINDOWHEIGHT/9 - 6)
+    name = ''
+    done = False
+    while not done: # Allows player to enter characters until enter key is pressed.
+        pygame.draw.rect(windowSurface, NAMEBOXCOLOR, nameBox1, 3)
+        pygame.draw.rect(windowSurface, BACKGROUNDCOLOR, nameBox2, 0)
+        drawText('Please enter your name:', font, windowSurface, nameBox2.x, nameBox2.y)
+        drawText(name, font, windowSurface, nameBox2.x, nameBox2.y + 40)
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                terminate()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    terminate()
+                elif event.key == K_RETURN:
+                    done = True
+                elif event.key == K_BACKSPACE:
+                    name = name[:-1]
+                elif len(name) <= 25:
+                    name += event.unicode
+
+    if survivalMode:
+        filename_2 = 'AWDodgerSurvivalScoreBoard.json'
+    else:
+        filename_2 = 'AWDodgerCasualScoreBoard.json'
+    try:
+        with open(filename_2, 'r') as f_obj:
+            scoreBoard = json.load(f_obj)
+    except FileNotFoundError:
+        scoreBoard = []
+    scoreBoard.append([name, score])
+    scoreBoard.sort(key=lambda x:x[1], reverse=True)
+    with open(filename_2, 'w') as f_obj:
+        json.dump(scoreBoard, f_obj)
+
+    while True: # Game over screen
+        windowSurface.fill(BACKGROUNDCOLOR)
+        drawText('Score: %s' % (score), font, windowSurface, 10, 0)
+        drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+        drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+        drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+        drawText('GAME OVER', font, windowSurface, (WINDOWWIDTH / 2.25), (WINDOWHEIGHT / 3))
+        drawText('Press a key to play again', font, windowSurface, (WINDOWWIDTH / 2.85), (WINDOWHEIGHT / 3) + 50)
+        drawText('Press "v" to view score board', font, windowSurface, (WINDOWWIDTH / 2.85), (WINDOWHEIGHT / 3) + 100)
+        drawText('Press "r" to reset all scores', font, windowSurface, (WINDOWWIDTH / 2.85), (WINDOWHEIGHT / 3) + 150)
+        pygame.display.update()
+        state = waitForPlayerToPressKey()
+        if state == 'view': # Allows player to view scoreboard
+            windowSurface.fill(BACKGROUNDCOLOR)
+            drawText('Score: %s' % (score), font, windowSurface, 10, 0)
+            drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+            drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+            drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+            drawText('Press "s" for survival mode scores', font, windowSurface, (WINDOWWIDTH / 2.85), (WINDOWHEIGHT / 3))
+            drawText('Press "c" for casual mode scores', font, windowSurface, (WINDOWWIDTH / 2.85), (WINDOWHEIGHT / 3) + 50)
+            pygame.display.update()
+            mode = selectMode()
+            if mode == 'survivalMode':
+                header = 'Survival'
+                filename_2 = 'AWDodgerSurvivalScoreBoard.json'
+            else:
+                header = 'Casual'
+                filename_2 = 'AWDodgerCasualScoreBoard.json'
+            try:
+                with open(filename_2, 'r') as f_obj:
+                    scoreBoard = json.load(f_obj)
+            except FileNotFoundError:
+                windowSurface.fill(BACKGROUNDCOLOR)
+                drawText('Score: %s' % (score), font, windowSurface, 10, 0)
+                drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+                drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+                drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+                drawText('No Scores For %s Mode' % (header), font, windowSurface, (WINDOWWIDTH / 2.85), (WINDOWHEIGHT / 3))
+            else:
+                windowSurface.fill(BACKGROUNDCOLOR)
+                drawText('Scoreboard For %s Mode' % (header), font, windowSurface, 10, 0)
+                scoreBoardLength = min(10, len(scoreBoard))
+                for i in range(scoreBoardLength):
+                    drawText('%s: %s' % (scoreBoard[i][0], scoreBoard[i][1]), font, windowSurface, 10, 40 + 40 * i)
+            drawText('Press a key to return to previous menu', font, windowSurface, 10, 600)
+            pygame.display.update()
+            waitForPlayerToPressKey()
+        elif state == 'reset': # Gives player option to reset all scores
+            windowSurface.fill(BACKGROUNDCOLOR)
+            drawText('Score: %s' % (score), font, windowSurface, 10, 0)
+            drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+            drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+            drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+            drawText('Are you sure that you want to reset all scores? (Press "r" to reset)', font, windowSurface, (WINDOWWIDTH / 7.5), (WINDOWHEIGHT / 3))
+            pygame.display.update()
+            state = waitForPlayerToPressKey()
+            if state == 'reset':
+                score = 0
+                topSurvivalScore = 0
+                topCasualScore = 0
+                try:
+                    os.remove('AWDodgerTopScores.json')
+                except FileNotFoundError:
+                    pass
+                try:
+                    os.remove('AWDodgerSurvivalScoreBoard.json')
+                except FileNotFoundError:
+                    pass
+                try:
+                    os.remove('AWDodgerCasualScoreBoard.json')
+                except FileNotFoundError:
+                    pass
+                windowSurface.fill(BACKGROUNDCOLOR)
+                drawText('Score: %s' % (score), font, windowSurface, 10, 0)
+                drawText('Top Survival Score: %s' % (topSurvivalScore), font, windowSurface, 10, 40)
+                drawText('Top Casual Score: %s' % (topCasualScore), font, windowSurface, 10, 80)
+                drawText('Lives: %s' % (lives), font, windowSurface, 10, 120)
+                drawText('All scores cleared!', font, windowSurface, (WINDOWWIDTH / 2.5), (WINDOWHEIGHT / 3))
+                drawText('Press a key to return to previous menu', font, windowSurface, 10, 600)
+                pygame.display.update()
+                waitForPlayerToPressKey()
+            else:
+                pass
+        else:
+            break
 
     gameOverSound.stop()
     windowSurface.fill(BACKGROUNDCOLOR)
