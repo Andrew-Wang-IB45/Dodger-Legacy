@@ -1,6 +1,6 @@
 Your objective is to avoid getting hit by the 
 baddies. To accomplish this, use the arrow keys,
-"wasd" keys, and mouse to move  around. Remember
+"wasd" keys, and mouse to move around. Remember
 that you can wrap around  the left and right edges
 of the screen.
 
